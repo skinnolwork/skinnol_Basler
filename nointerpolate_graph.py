@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # CSV 파일 읽기
-file_path = "Liitman4.csv"
+file_path = "Littman_result_1.csv"
 data = pd.read_csv(file_path)
 
 # x와 y 값 추출

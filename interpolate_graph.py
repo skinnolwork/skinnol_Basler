@@ -4,7 +4,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 # CSV 파일 읽기
-file_path = "Liitman4.csv"
+file_path = "Littman_result_3.csv"
 data = pd.read_csv(file_path)
 
 # x와 y 값 추출
@@ -14,8 +14,7 @@ y = data['y'].values
 # 보간 함수 생성 (선형 보간)
 interp_function = interp1d(x, y, kind='linear', fill_value="extrapolate")
 
-# 기존 x값 유지 + 새로운 x 값 생성 (0.00001 간격으로)
-x_new = np.arange(x.min(), x.max(), 0.00001)
+x_new = np.arange(x.min(), x.max(), 0.001)
 x_combined = np.unique(np.concatenate((x, x_new)))  # 기존 x값과 새로운 x값 병합
 
 # 보간된 y 값 계산
@@ -42,8 +41,8 @@ else:
 
 # 보간 데이터 시각화
 plt.figure(figsize=(8, 6))
-plt.plot(x_combined, y_combined, label="Interpolated Points (0.00001 step)", alpha=0.8, color='green', markersize=0.1)
-plt.plot(x, y,'o' ,alpha=0.8, color='red', markersize=3)
+plt.plot(x_combined, y_combined, 'o', label="Interpolated Points (0.001 step)", alpha=0.8, color='green', markersize=0.1)
+# plt.plot(x, y,'o' ,alpha=0.8, color='red', markersize=3)
 plt.axhline(half_max, color='red', linestyle='--', label=f"Half Maximum ({half_max:.4f})")
 if intersection_start is not None and intersection_end is not None:
     plt.axvline(intersection_start, color='blue', linestyle='--', label=f"Intersection Start ({intersection_start:.4f})")
