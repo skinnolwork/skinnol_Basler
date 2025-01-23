@@ -10,9 +10,8 @@ import os
 
 # 변수 설정
 CAMERA_SIZE = [3840, 2160]  # Width, Height
-EXPOSURE_TIME = 1000000.0
-GAIN = 40.0
-
+EXPOSURE_TIME = 3000.0
+GAIN = 10.0
 MONO_MODE = "Mono12"  # Mono8 또는 Mono12 설정
 
 class BaslerCamera:
@@ -25,6 +24,7 @@ class BaslerCamera:
         self.selected_rows = []  # 선택한 행 범위 저장
 
     def initialize_camera(self):
+        """카메라 초기화 및 설정"""
         self.camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
         self.camera.Open()
         print(f"Using device: {self.camera.GetDeviceInfo().GetModelName()}")
@@ -40,6 +40,7 @@ class BaslerCamera:
         self.camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
 
     def release_resources(self):
+        """카메라 및 리소스 해제"""
         self.camera.StopGrabbing()
         self.camera.Close()
         cv2.destroyAllWindows()
@@ -56,6 +57,7 @@ class BaslerCamera:
                 print(f"Selected Rows Range: {self.selected_rows}")
 
     def detect_peaks(self, intensity, distance=50, prominence_ratio=0.5):
+        """피크를 감지하고 하이라이트 영역을 반환"""
         threshold_index = int(0.2 * len(intensity))
         dynamic_height = np.sort(intensity)[threshold_index]
         peaks, _ = find_peaks(
@@ -74,8 +76,9 @@ class BaslerCamera:
         return peaks, highlighted_intensity
 
     def save_image(self, row_intensity, img_array):
+        """이미지 저장"""
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        date_folder = datetime.datetime.now().strftime("%Y%m%d")
+        date_folder = datetime.datetime.now().strftime("%Y%m%d")  # 오늘 날짜 폴더 이름
         # 저장할 디렉토리 경로 생성
         save_directory = f"./{date_folder}"
         os.makedirs(save_directory, exist_ok=True)  # 디렉토리 생성 (이미 존재하면 무시)
@@ -100,7 +103,7 @@ class BaslerCamera:
 
         # CSV 저장
         x_length = len(row_intensity)
-        x_values = np.linspace(750, 950, x_length)  # X축 값 생성
+        x_values = np.linspace(950, 750, x_length)  # X축 값 생성
         data_to_save = np.column_stack((x_values, row_intensity))  # X와 Y 값을 2D 배열로 결합
 
         filename_csv = f"{save_directory}/data_{self.mono_mode}_Row_{timestamp}.csv"
@@ -108,7 +111,13 @@ class BaslerCamera:
         print(f"CSV file saved as {filename_csv}")
 
     def process_image(self, img_array):
+        """이미지 데이터 처리 및 그래프 업데이트"""
         plt.clf()
+
+        # # Mono12 데이터를 8비트로 스케일링
+        # if self.mono_mode == "Mono12":
+        #     img_array = ((img_array / 4095) * 255).astype(np.uint8)
+
 
         # 범위 모드 데이터 처리
         if len(self.selected_rows) == 2:
@@ -133,6 +142,7 @@ class BaslerCamera:
         return row_intensity, img_array
 
     def display_camera_feed(self, img_array, row_intensity):
+        """카메라 화면 표시"""
         if self.mono_mode == "Mono12":
             img_array = ((img_array / 4095) * 255).astype(np.uint8)
 
@@ -142,13 +152,13 @@ class BaslerCamera:
         text = ""
         if len(self.selected_rows) >= 1:
             start_row = self.selected_rows[0]
-            text = f"Start: {start_row}"
             cv2.line(img_colored, (0, start_row), (self.camera_size[0], start_row), (0, 255, 0), 3)
+            text = f"Start: {start_row}"
         if len(self.selected_rows) == 2:
             start_row, end_row = self.selected_rows
-            text = f"Range: {start_row} ~ {end_row}"
             cv2.line(img_colored, (0, start_row), (self.camera_size[0], start_row), (0, 255, 0), 3)
             cv2.line(img_colored, (0, end_row), (self.camera_size[0], end_row), (0, 255, 0), 3)
+            text = f"Range: {start_row} ~ {end_row}"
 
         # X축 표시 (linspace 사용)
         x_length, y_length = self.camera_size  # X축과 Y축 크기 가져오기
@@ -169,25 +179,50 @@ class BaslerCamera:
         # peaks, highlighted_intensity = self.detect_peaks(row_intensity)
 
         # X축 데이터 설정
-        x_length = self.camera_size[0]  # 이미지의 가로 크기
-        axis_wavelength = np.linspace(950, 750, x_length)  # X축 범위와 동일한 Wavelength 생성
+        # x_length = self.camera_size[0]  # 이미지의 가로 크기
+        # axis_wavelength = np.linspace(950, 750, x_length)  # X축 범위와 동일한 Wavelength 생성
 
         # 그래프 업데이트
         # x_axis = np.linspace(0, self.camera_size[0], self.camera_size[0])
-        plt.plot(axis_wavelength, row_intensity, color='red', linewidth=1)
-        # 피크 검출
+        # plt.plot(axis_wavelength, row_intensity, color='red', linewidth=1)
+        # # 피크 검출
         # plt.plot(axis_wavelength, highlighted_intensity, label='Highlighted Intensity', color='blue')
         # for peak in peaks:
         #     plt.text(axis_wavelength[peak], row_intensity[peak] + 10, f"{axis_wavelength[peak]:.2f}", color='green', fontsize=8, ha='center')
-        
-        plt.xticks(np.arange(950, 750, -5))  # X축 간격을 20 단위로 표시
-        plt.xlim([950, 750])  # X축 범위 강제 설정
-        title = f"{self.mono_mode} - Single Row Intensity" if len(self.selected_rows) == 2 else f"{self.mono_mode} - Range Row Intensity"
-        plt.title(title)
-        plt.xlabel("Spectrum Column Index")
-        plt.ylabel("Intensity")
-        plt.grid()
-        plt.pause(0.1)
+    
+        # X축 데이터 4등분
+        x_length = len(row_intensity)
+        axis_wavelength = np.linspace(950, 750, x_length)  # 전체 X축 데이터
+        num_splits = 4  # 4등분
+        split_size = x_length // num_splits  # 각 구간의 크기
+        split_ranges = [slice(i * split_size, (i + 1) * split_size) for i in range(num_splits)]
+
+        # 기존 창을 초기화하고 한 번에 4개 그래프 그리기
+        plt.clf()  # 이전 그래프 초기화
+        for i, split_range in enumerate(split_ranges):
+            plt.subplot(4, 1, i + 1)  # 4행 1열의 서브플롯 중 i+1번째
+            plt.plot(
+                axis_wavelength[split_range],
+                row_intensity[split_range],
+                color="blue"
+            )
+            
+            y_min = np.min(row_intensity[split_range]) 
+            y_max = np.max(row_intensity[split_range])
+
+            plt.ylim(y_min, y_max)
+            plt.ylabel("Intensity")
+            plt.grid()
+
+            # X축 레이블과 간격 표시
+            x_ticks = np.linspace(axis_wavelength[split_range.start], axis_wavelength[split_range.stop - 1], 5)  # 5개 간격으로 표시
+            plt.xticks(x_ticks)  # X축에 간격 적용
+
+            # 모든 서브플롯에서 X축 레이블 표시
+            plt.tick_params(labelbottom=True)  # X축 레이블 표시
+
+        plt.tight_layout()  # 서브플롯 간격 조정
+        plt.pause(0.1)  # 그래프 갱신
 
     # display에 표시되는 정보 출력 함수
     def add_annotations(self, img_array):
@@ -253,6 +288,7 @@ class BaslerCamera:
         return img_colored
 
     def run(self):
+        """메인 실행 함수"""
         self.initialize_camera()
         cv2.namedWindow(f'Basler Camera - {self.mono_mode}', cv2.WINDOW_NORMAL)
         cv2.resizeWindow(f'Basler Camera - {self.mono_mode}', 960, 540)

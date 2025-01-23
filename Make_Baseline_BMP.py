@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import make_interp_spline
 
 # 1. 이미지 데이터 불러오기
-image = cv2.imread('graph_Mono8_Row_20250106_162355.bmp', cv2.IMREAD_GRAYSCALE)
+image = cv2.imread('capture_Mono8_Row_20250116_162222.bmp', cv2.IMREAD_GRAYSCALE)
 if image is None:
     print("Error: Image not found. Check the file path.")
     exit()
@@ -58,5 +58,6 @@ plt.plot(x_index, corrected_intensity, label='Corrected Intensity', color='red')
 plt.xlabel('Pixel Position (x-axis)')
 plt.ylabel('Intensity (a.u.)')
 plt.title('Baseline Correction with Spline')
+plt.savefig('baseline_corrected_graph.png')
 plt.legend()
 plt.show()

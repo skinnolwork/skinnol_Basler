@@ -31,5 +31,5 @@ def plot_csv_data(csv_file):
 
 if __name__ == "__main__":
     # CSV 파일 경로
-    csv_file_path = "./data_Mono8_Row_20250109_094643.csv"  # 파일 경로를 저장된 CSV 파일 이름으로 수정
+    csv_file_path = "./data_Mono8_Row_20250116_160403.csv"  # 파일 경로를 저장된 CSV 파일 이름으로 수정
     plot_csv_data(csv_file_path)
