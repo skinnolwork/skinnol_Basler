@@ -10,7 +10,9 @@ import os
 class PeakDetection:
     def __init__(self, file_path):
         self.file_path = file_path
-        self.x_values = None
+        self.x_original = None  # 기존 X 값
+        self.x_nm = None        # nm로 변환된 X 값
+        self.x_cm = None        # cm^-1로 변환된 X 값
         self.intensity = None
         self.smoothed_intensity = None
         self.peaks = None
@@ -18,58 +20,48 @@ class PeakDetection:
 
     def load_data(self):
         data = pd.read_csv(self.file_path)
-        self.x_values = data['X'].values
+        self.x_original = data['X'].values
         self.intensity = data['Y'].values
 
     def apply_smoothing(self, window_length=31, polyorder=1):
         self.smoothed_intensity = savgol_filter(self.intensity, window_length=window_length, polyorder=polyorder)
 
-    @staticmethod
-    def adjust_peaks_to_original(intensity, peaks, window=10):
-        adjusted_peaks = []
-        for peak in peaks:
-            start = max(0, peak - window)
-            end = min(len(intensity), peak + window + 1)
-            local_peak = start + np.argmax(intensity[start:end])  # Find local maximum in the range
-            adjusted_peaks.append(local_peak)
-        return np.array(adjusted_peaks)
+    def adjust_graph_manual(self, target_x_peak1_nm, target_x_peak2_nm, target_x_peak1_cm, target_x_peak2_cm):
+        current_x_peak1 = self.x_nm[self.peaks[0]]
+        current_x_peak2 = self.x_nm[self.peaks[1]]
 
-    def detect_peaks(self, distance=30, prominence_ratio=0.2):
-        threshold_index = int(0.3 * len(self.smoothed_intensity))
-        dynamic_height = np.sort(self.smoothed_intensity)[threshold_index]
-        peaks, _ = find_peaks(
-            self.smoothed_intensity,
-            prominence=prominence_ratio * dynamic_height,
-            height=dynamic_height,
-            distance=distance
-        )
+        m_nm = (target_x_peak2_nm - target_x_peak1_nm) / (current_x_peak2 - current_x_peak1)
+        b_nm = target_x_peak1_nm - m_nm * current_x_peak1
+        self.x_nm = m_nm * self.x_nm + b_nm
 
-        peaks = np.delete(peaks, [0,1])
-        self.peaks = self.adjust_peaks_to_original(self.intensity, peaks, window=10)
+        self.convert_to_cm()
 
-    def adjust_graph(self, target_x_3rd, target_x_last):
-        current_x_3rd = self.x_values[self.peaks[2]]
-        current_x_last = self.x_values[self.peaks[-1]]
+        current_x_peak1_cm = self.x_cm[self.peaks[0]]
+        current_x_peak2_cm = self.x_cm[self.peaks[1]]
 
-        m = (target_x_last - target_x_3rd) / (current_x_last - current_x_3rd)
-        b = target_x_3rd - m * current_x_3rd
+        m_cm = (target_x_peak2_cm - target_x_peak1_cm) / (current_x_peak2_cm - current_x_peak1_cm)
+        b_cm = target_x_peak1_cm - m_cm * current_x_peak1_cm
+        self.x_cm = m_cm * self.x_cm + b_cm
 
-        self.x_values = m * self.x_values + b
 
     def convert_to_cm(self):
-        self.x_values = 1e7 / self.x_values
+        self.x_cm  = 1e7 / self.x_nm
 
     def baseline_correction(self):
+        sorted_indices = np.argsort(self.x_original)[::-1]  # 내림차순 정렬
+        x_decreasing = self.x_original[sorted_indices]
+        intensity_sorted = self.intensity[sorted_indices]
+
         plt.figure(figsize=(10, 6))
-        plt.plot(self.x_values, self.intensity, label='Intensity', color='blue')
+        plt.plot(x_decreasing, intensity_sorted, label='Original Intensity', color='blue', alpha=0.5)  # Original graph with transparency
         plt.xlabel('Pixel Position (x-axis)')
         plt.ylabel('Intensity (a.u.)')
         plt.title('Select Baseline Points')
         plt.legend()
+        plt.xlim([max(x_decreasing), min(x_decreasing)])  # X축 감소 방향 설정
 
-        plt.gca().invert_xaxis()
 
-        print("그래프에서 Baseline으로 사용할 포인트를 선택하세요 (엔터로 종료).")
+        print("Select Baseline Points on the Graph (Press Enter to Finish).")
         baseline_points = plt.ginput(n=-1, timeout=0)
         if len(baseline_points) == 0:
             print("Error: No points selected.")
@@ -77,101 +69,118 @@ class PeakDetection:
 
         baseline_points = np.array(baseline_points)
 
-        # 중복된 X 좌표 제거
         baseline_x = baseline_points[:, 0]
         baseline_y = baseline_points[:, 1]
         unique_indices = np.unique(baseline_x, return_index=True)[1]
         baseline_x = baseline_x[unique_indices]
         baseline_y = baseline_y[unique_indices]
 
-        # Baseline 계산
-        spline = make_interp_spline(baseline_x, baseline_y, k=1)
-        baseline_fit = spline(self.x_values)
+        sorted_indices = np.argsort(baseline_x)
+        baseline_x = baseline_x[sorted_indices]
+        baseline_y = baseline_y[sorted_indices]
 
-        # 데이터 보정
-        self.corrected_intensity = self.intensity - baseline_fit
+        spline = make_interp_spline(baseline_x, baseline_y, k=3)
+        baseline_fit = spline(x_decreasing)
 
+        corrected_intensity = intensity_sorted - baseline_fit
 
-    def visualize_cm(self, title):
         plt.figure(figsize=(10, 6))
-        plt.plot(self.x_values, self.corrected_intensity, label='Corrected Intensity', color='red')
-        plt.scatter(self.x_values[self.peaks], self.corrected_intensity[self.peaks], color='orange', label='Peaks')
-        for i, (x, y) in enumerate(zip(self.x_values[self.peaks], self.corrected_intensity[self.peaks])):
-            plt.text(x, y, f"{i + 1}", fontsize=9, ha='center', va='bottom')
+        plt.plot(x_decreasing, intensity_sorted, label='Original Intensity', color='blue', alpha=0.5)  # Original graph with transparency
+        plt.plot(x_decreasing, baseline_fit, label='Baseline', color='green', linestyle='--')  # Baseline visualization
+        plt.plot(x_decreasing, corrected_intensity, label='Corrected Intensity', color='red')  # Corrected intensity
+        plt.xlabel('Pixel Position (x-axis)')
+        plt.ylabel('Intensity (a.u.)')
+        plt.title('Baseline Correction with Original and Corrected Graphs')
+        plt.legend()
+        plt.gca().invert_xaxis()
+        plt.xlim([max(x_decreasing), min(x_decreasing)])  # X축 감소 방향 설정
+        
+        plt.show()
+        plt.close()
+
+        self.corrected_intensity = corrected_intensity
+    
+    def select_peaks(self):
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.x_original, self.corrected_intensity, label='Corrected Intensity', color='red')
+        plt.xlabel('Pixel Position (x-axis)')
+        plt.ylabel('Corrected Intensity (a.u.)')
+        plt.title('Select Two Peaks')
+        plt.legend()
+        plt.gca().invert_xaxis()
+
+        print("Select Two Peaks on the Graph (Press Enter to Finish).")
+        peak_points = plt.ginput(n=2, timeout=0)
+        if len(peak_points) != 2:
+            print("Error: Two peaks must be selected.")
+            return
+
+        self.peaks = [np.abs(self.x_original - peak[0]).argmin() for peak in peak_points]
+        self.x_nm = self.x_original.copy()  # nm 값 초기화
+        plt.close()
+
+
+    def visualize(self, title):
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.x_cm, self.corrected_intensity, label='Corrected Intensity', color='red')
+        plt.scatter(
+            [self.x_cm[self.peaks[0]], self.x_cm[self.peaks[1]]],
+            [self.corrected_intensity[self.peaks[0]], self.corrected_intensity[self.peaks[1]]],
+            color='orange',
+            label='Selected Peaks'
+        )
         plt.xlabel('Wavenumber (cm^-1)')
-        plt.ylabel('Intensity (a.u.)')
+        plt.ylabel('Corrected Intensity (a.u.)')
         plt.title(title)
         plt.legend()
 
-        plt.gca().xaxis.set_major_locator(plt.MultipleLocator(10))
-        plt.grid(visible=True, which='major', axis='x', linewidth=0.5, linestyle='--', alpha=0.7)
+        if self.x_cm[0] > 1e3:  # cm^-1 단위
+            plt.gca().xaxis.set_major_locator(plt.MultipleLocator(10))
+            plt.grid(visible=True, which='major', axis='x', linewidth=0.5, linestyle='--', alpha=0.7)
 
-        for label in plt.gca().get_xticklabels():
-            text = label.get_text()
-            try:
-                if text and int(float(text)) % 100 != 0:
+            for label in plt.gca().get_xticklabels():
+                text = label.get_text()
+                try:
+                    if text and int(float(text)) % 100 != 0:
+                        label.set_visible(False)
+                except ValueError:
                     label.set_visible(False)
-            except ValueError:
-                label.set_visible(False)
 
         plt.gca().invert_xaxis()
-
         plt.show()
+        plt.close()
 
+    def save_to_csv(self):
+        # 데이터 저장
+        data = pd.DataFrame({
+            'x_original': self.x_original,
+            'nm': self.x_nm,
+            'cm^-1': self.x_cm,
+            'Intensity': self.corrected_intensity
+        })
 
-    def visualize_nm(self, title):
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.x_values, self.corrected_intensity, label='Corrected Intensity', color='red')
-        plt.scatter(self.x_values[self.peaks], self.corrected_intensity[self.peaks], color='orange', label='Peaks')
-        for i, (x, y) in enumerate(zip(self.x_values[self.peaks], self.corrected_intensity[self.peaks])):
-            plt.text(x, y, f"{i + 1}", fontsize=9, ha='center', va='bottom')
-        plt.xlabel('Wavelength (nm)')
-        plt.ylabel('Intensity (a.u.)')
-        plt.title(title)
-        plt.legend()
+        # 파일 경로 수정
+        base_name, ext = os.path.splitext(self.file_path)
+        output_file = f"{base_name}_convert{ext}"
 
-        plt.gca().xaxis.set_major_locator(plt.MultipleLocator(1))  # 5 단위로 Grid 설정
-        plt.grid(visible=True, which='major', axis='x', linewidth=0.5, linestyle='--', alpha=0.7)
+        # 파일 저장
+        data.to_csv(output_file, index=False)
+        print(f"Processed data saved to {output_file}")
 
-        for label in plt.gca().get_xticklabels():
-            text = label.get_text()
-            try:
-                if text and int(float(text)) % 5 != 0:
-                    label.set_visible(False)
-            except ValueError:
-                label.set_visible(False)
-
-
-        # X축 반전
-        plt.gca().invert_xaxis()
-
-        plt.show()
-
-    def process_all(self, target_x_3rd_nm, target_x_last_nm, target_x_3rd_cm, target_x_last_cm):
-        # CSV 데이터 처리
+    def process_all(self, target_x_peak1_nm, target_x_peak2_nm, target_x_peak1_cm, target_x_peak2_cm):
         self.load_data()
         self.apply_smoothing()
-        self.detect_peaks()
-        self.adjust_graph(target_x_3rd_nm, target_x_last_nm)
         self.baseline_correction()
-        self.visualize_nm('Adjusted Graph (nm)')
+        self.select_peaks()
+        self.adjust_graph_manual(target_x_peak1_nm, target_x_peak2_nm, target_x_peak1_cm, target_x_peak2_cm)
+        self.visualize("Adjusted Graph (cm^-1)")
+        self.save_to_csv()
 
-        # nm → cm^-1 변환 및 피크 조정
-        self.convert_to_cm()
-        self.adjust_graph(target_x_3rd_cm, target_x_last_cm)
-        self.visualize_cm('Adjusted Graph (cm^-1)')
-
-
-date_folder = datetime.datetime.now().strftime("%Y%m%d")
-save_directory = os.path.join(os.getcwd(), date_folder)
-
-file_name = "data_Mono12_Row_20250123_094237.csv"
-file_path = os.path.join(save_directory, file_name)
-
-target_x_3rd_nm = 852.1
-target_x_last_nm = 898.2
-target_x_3rd_cm = 1001.4
-target_x_last_cm = 1602.3
+file_path = "data_Mono12_Row_20250121_145322.csv"
+target_x_peak1_nm = 852.1
+target_x_peak2_nm = 898.2
+target_x_peak1_cm = 1001.4
+target_x_peak2_cm = 1602.3
 
 peak_detector = PeakDetection(file_path)
-peak_detector.process_all(target_x_3rd_nm, target_x_last_nm, target_x_3rd_cm, target_x_last_cm)
+peak_detector.process_all(target_x_peak1_nm, target_x_peak2_nm, target_x_peak1_cm, target_x_peak2_cm)

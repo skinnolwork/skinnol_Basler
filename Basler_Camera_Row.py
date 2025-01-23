@@ -100,7 +100,7 @@ class BaslerCamera:
 
         # CSV 저장
         x_length = len(row_intensity)
-        x_values = np.linspace(750, 950, x_length)  # X축 값 생성
+        x_values = np.linspace(950, 750, x_length)  # X축 값 생성
         data_to_save = np.column_stack((x_values, row_intensity))  # X와 Y 값을 2D 배열로 결합
 
         filename_csv = f"{save_directory}/data_{self.mono_mode}_Row_{timestamp}.csv"
