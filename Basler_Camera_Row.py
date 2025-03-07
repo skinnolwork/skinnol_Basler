@@ -23,6 +23,12 @@ class BaslerCamera:
         self.mono_mode = mono_mode
         self.camera = None
         self.selected_rows = []  # 선택한 행 범위 저장
+        self.x_original_nm = np.linspace(950, 750, self.camera_size[0])
+        self.x_nm = self.x_nm = self.x_original_nm.copy()
+        self.x_cm = 1e7 / self.x_nm  # 초기 cm 변환
+        self.peaks = []  # 선택한 피크 인덱스를 저장
+        self.use_cm = False
+        self.zoom_range = None
 
     def initialize_camera(self):
         self.camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
@@ -73,38 +79,77 @@ class BaslerCamera:
 
         return peaks, highlighted_intensity
 
-    def save_image(self, row_intensity, img_array):
+    def save_image(self, grab_result, row_intensity):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         date_folder = datetime.datetime.now().strftime("%Y%m%d")
-        # 저장할 디렉토리 경로 생성
         save_directory = f"./{date_folder}"
-        os.makedirs(save_directory, exist_ok=True)  # 디렉토리 생성 (이미 존재하면 무시)
+        os.makedirs(save_directory, exist_ok=True)
 
-        # 선택된 행/범위가 표시된 이미지를 생성
-        img_colored = self.add_annotations(img_array)
-        
-        filename_image = f"{save_directory}/capture_{self.mono_mode}_Row_{timestamp}.{'bmp' if self.mono_mode == 'Mono8' else 'tiff'}"
-        # 카메라 저장
-        if self.mono_mode == "Mono8":
-            cv2.imwrite(filename_image, img_colored)
-            print(f"Image saved as {filename_image} (8-bit BMP format)")
+        # 파일 이름 설정
+        original_filename = f"{save_directory}/original_{self.mono_mode}_{timestamp}.{'bmp' if self.mono_mode == 'Mono8' else 'tiff'}"
+        resized_png_filename = f"{save_directory}/resized_{self.mono_mode}_{timestamp}.png"
+        annotated_png_filename = f"{save_directory}/annotated_{self.mono_mode}_{timestamp}.png"
+        normalized_tiff_filename = f"{save_directory}/normalized_{self.mono_mode}_{timestamp}.tiff"
 
-        elif self.mono_mode == "Mono12":
-            tifffile.imwrite(filename_image, img_colored, compression=None)
-            print(f"Image saved as {filename_image} (16-bit TIFF format)")
+        # 이미지 데이터 가져오기
+        img_array = grab_result.Array
 
-        # 그래프 저장
-        filename_graph = f"{save_directory}/graph_{self.mono_mode}_Row_{timestamp}.png"
-        plt.savefig(filename_graph)
-        print(f"Graph saved as {filename_graph}")
+        if self.mono_mode == "Mono12":
+            img_array &= 0xFFF  # 12비트 데이터 유지
+
+            # TIFF 저장 (원본)
+            tifffile.imwrite(original_filename, img_array, dtype="uint16", compression=None)
+            print(f"Original TIFF saved as {original_filename} (16-bit TIFF)")
+
+            # 정규화 (0-65535로 확장)
+            img_array_normalized = (img_array / 4095.0 * 65535).astype(np.uint16)
+            tifffile.imwrite(normalized_tiff_filename, img_array_normalized, dtype="uint16", compression=None)
+            print(f"Normalized TIFF saved as {normalized_tiff_filename} (16-bit TIFF)")
+
+            # 384x216 PNG 저장 (정규화 후)
+            img_resized = cv2.resize((img_array / 4095.0 * 255).astype(np.uint8), (384, 216), interpolation=cv2.INTER_AREA)
+            cv2.imwrite(resized_png_filename, img_resized)
+            print(f"Resized PNG saved as {resized_png_filename} (384x216)")
+
+            # 주석이 포함된 PNG 저장
+            annotated_image = self.add_annotations(img_array)
+            cv2.imwrite(annotated_png_filename, annotated_image)
+            print(f"Annotated PNG saved as {annotated_png_filename} (full-size with annotations)")
+
+        elif self.mono_mode == "Mono8":
+            # BMP 저장 (원본)
+            cv2.imwrite(original_filename, img_array)
+            print(f"Original BMP saved as {original_filename} (8-bit BMP)")
+
+            # 384x216 PNG 저장
+            img_resized = cv2.resize(img_array, (384, 216), interpolation=cv2.INTER_AREA)
+            cv2.imwrite(resized_png_filename, img_resized)
+            print(f"Resized PNG saved as {resized_png_filename} (384x216)")
+
+            # 주석이 포함된 PNG 저장
+            annotated_image = self.add_annotations(img_array)
+            cv2.imwrite(annotated_png_filename, annotated_image)
+            print(f"Annotated PNG saved as {annotated_png_filename} (full-size with annotations)")
+
+
+        if self.use_cm:
+            filename_graph = f"{save_directory}/graph_cm_{self.mono_mode}_Row_{timestamp}.png"
+            print(f"Graph PNG saved as {filename_graph} (384x216)")
+            plt.savefig(filename_graph)
 
         # CSV 저장
         x_length = len(row_intensity)
-        x_values = np.linspace(950, 750, x_length)  # X축 값 생성
-        data_to_save = np.column_stack((x_values, row_intensity))  # X와 Y 값을 2D 배열로 결합
+        x_original = self.x_original_nm  # x_original 값 (픽셀 인덱스)
+        x_nm = self.x_nm  # 변환된 nm 값
+        x_cm = self.x_cm if self.use_cm else 1e7 / x_nm  # cm^-1 값 (use_cm 여부에 따라 결정)
+        intensity = row_intensity  # Intensity 값
 
+        # 데이터를 열 단위로 결합
+        data_to_save = np.column_stack((x_original, x_nm, x_cm, intensity))
+        
         filename_csv = f"{save_directory}/data_{self.mono_mode}_Row_{timestamp}.csv"
-        np.savetxt(filename_csv, data_to_save, delimiter=",", fmt="%.2f", header="X,Y", comments="")
+        header = "x_original,nm,cm^-1,intensity"  # CSV 헤더
+        np.savetxt(filename_csv, data_to_save, delimiter=",", fmt="%.2f", header=header, comments="")
         print(f"CSV file saved as {filename_csv}")
 
     def process_image(self, img_array):
@@ -168,26 +213,39 @@ class BaslerCamera:
         # 피크 검출
         # peaks, highlighted_intensity = self.detect_peaks(row_intensity)
 
-        # X축 데이터 설정
-        x_length = self.camera_size[0]  # 이미지의 가로 크기
-        axis_wavelength = np.linspace(950, 750, x_length)  # X축 범위와 동일한 Wavelength 생성
+        y_max = np.max(row_intensity)
+
+        if self.use_cm:
+            plt.plot(self.x_cm, row_intensity, color='red', linewidth=1)
+            plt.xlabel("Wavenumber (cm^-1)")
+            # plt.xlim([self.x_cm[0], self.x_cm[-1]])  # 큰 값에서 작은 값으로 설정
+            plt.xlim(self.zoom_range if self.zoom_range else [self.x_cm[0], self.x_cm[-1]])
+            plt.ylim([0, y_max ])
+            plt.title("Real-Time Spectrum (cm^-1)")
+            plt.ylabel("Intensity")
+            plt.grid()
+
+        else:
+            plt.plot(self.x_original_nm, row_intensity, color='red', linewidth=1)
+            plt.xlabel("Wavelength (nm)")
+            # plt.xlim([self.x_original_nm[0], self.x_original_nm[-1]])
+            plt.xlim(self.zoom_range if self.zoom_range else [self.x_original_nm[0], self.x_original_nm[-1]])
+            plt.ylim([0, y_max])
+            plt.title("Real-Time Spectrum (nm)")
+            plt.ylabel("Intensity")
+            plt.grid()
+
+
+        plt.pause(0.1)
 
         # 그래프 업데이트
         # x_axis = np.linspace(0, self.camera_size[0], self.camera_size[0])
-        plt.plot(axis_wavelength, row_intensity, color='red', linewidth=1)
+        # plt.plot(axis_wavelength, row_intensity, color='red', linewidth=1)
         # 피크 검출
         # plt.plot(axis_wavelength, highlighted_intensity, label='Highlighted Intensity', color='blue')
         # for peak in peaks:
         #     plt.text(axis_wavelength[peak], row_intensity[peak] + 10, f"{axis_wavelength[peak]:.2f}", color='green', fontsize=8, ha='center')
-        
-        plt.xticks(np.arange(950, 750, -5))  # X축 간격을 20 단위로 표시
-        plt.xlim([950, 750])  # X축 범위 강제 설정
-        title = f"{self.mono_mode} - Single Row Intensity" if len(self.selected_rows) == 2 else f"{self.mono_mode} - Range Row Intensity"
-        plt.title(title)
-        plt.xlabel("Spectrum Column Index")
-        plt.ylabel("Intensity")
-        plt.grid()
-        plt.pause(0.1)
+
 
     # display에 표시되는 정보 출력 함수
     def add_annotations(self, img_array):
@@ -252,12 +310,45 @@ class BaslerCamera:
 
         return img_colored
 
+    def select_two_peaks(self):
+        print("Select two peaks on the graph (Press Enter after selection).")
+        peak_points = plt.ginput(n=2, timeout=0)
+        if len(peak_points) != 2:
+            print("Error: Two peaks must be selected.")
+            return None
+        # 두 피크의 인덱스를 반환
+        return [np.abs(self.x_original_nm - peak[0]).argmin() for peak in peak_points]
+
+    def adjust_axis_based_on_peaks(self, target_x_peak1_nm, target_x_peak2_nm, target_x_peak1_cm, target_x_peak2_cm):
+        # 선택한 두 피크 위치
+        current_x_peak1_nm = self.x_original_nm[self.peaks[0]]
+        current_x_peak2_nm = self.x_original_nm[self.peaks[1]]
+
+        # nm 변환 계산
+        m_nm = (target_x_peak2_nm - target_x_peak1_nm) / (current_x_peak2_nm - current_x_peak1_nm)
+        b_nm = target_x_peak1_nm - m_nm * current_x_peak1_nm
+        
+        self.x_nm = m_nm * self.x_original_nm + b_nm
+        self.x_cm = 1e7 / self.x_nm
+
+        current_x_peak1_cm = self.x_cm[self.peaks[0]]
+        current_x_peak2_cm = self.x_cm[self.peaks[1]]
+
+        m_cm = (target_x_peak2_cm - target_x_peak1_cm) / (current_x_peak2_cm - current_x_peak1_cm)
+        b_cm = target_x_peak1_cm - m_cm * current_x_peak1_cm
+        self.x_cm = m_cm * self.x_cm + b_cm
+
+        self.use_cm = True
+        print("X-axis adjusted based on selected peaks.")
+
+
     def run(self):
         self.initialize_camera()
         cv2.namedWindow(f'Basler Camera - {self.mono_mode}', cv2.WINDOW_NORMAL)
         cv2.resizeWindow(f'Basler Camera - {self.mono_mode}', 960, 540)
         cv2.setMouseCallback(f'Basler Camera - {self.mono_mode}', self.mouse_callback)
 
+        p_pressed_count = 0  # "P" 키 눌린 횟수 추적
         try:
             while self.camera.IsGrabbing():
                 grab_result = self.camera.RetrieveResult(int(self.exposure_time), pylon.TimeoutHandling_ThrowException)
@@ -268,19 +359,89 @@ class BaslerCamera:
                         img_array &= 0xFFF  # Mono12의 하위 12비트 유지
 
                     row_intensity, processed_img = self.process_image(img_array)
+
+                    # 실시간 그래프 표시 (확대 모드 반영)
                     self.display_camera_feed(img_array, row_intensity)
 
-                    if keyboard.is_pressed("b"):
-                        self.save_image(row_intensity, processed_img)
+                    # "P"를 누르면 피크 선택 및 확대 모드 전환
+                    if keyboard.is_pressed("p"):
+                        p_pressed_count += 1
+                        print(f'"P" pressed {p_pressed_count} time(s)')
+
+                        if p_pressed_count == 1:
+                            # 기존 기능: 피크 선택 및 축 변환
+                            print("Selecting peaks...")
+                            self.peaks = self.select_two_peaks()
+                            if self.peaks:
+                                self.adjust_axis_based_on_peaks(
+                                    target_x_peak1_nm=852.1, target_x_peak2_nm=898.2,
+                                    target_x_peak1_cm=1001.4, target_x_peak2_cm=1602.3
+                                )
+                                print("Axis adjusted based on selected peaks.")
+
+                        elif p_pressed_count == 2:
+                            # 🔥 확대 모드 실행
+                            print("Select zoom region: Click two points on the graph.")
+                            self.select_zoom_region()
+                            p_pressed_count = 0  # 다시 초기화
 
                     if keyboard.is_pressed("esc"):
                         break
 
                 grab_result.Release()
+                plt.pause(0.1)  # 🔥 그래프 업데이트 유지
+
         except Exception as e:
             print(f"Error: {e}")
         finally:
             self.release_resources()
+
+    def select_zoom_region(self):
+        """ P를 한 번 더 눌렀을 때, 확대할 영역을 설정하는 함수 """
+        zoom_points = plt.ginput(n=2, timeout=0)  # 두 점 선택
+
+        if len(zoom_points) == 2:
+            (x1, y1), (x2, y2) = zoom_points
+            self.zoom_x_range = [max(x1, x2), min(x1, x2)]
+            self.zoom_y_range = [min(y1, y2), max(y1, y2)]
+            print(f"확대 범위 설정: X [{self.zoom_x_range[0]:.2f}, {self.zoom_x_range[1]:.2f}], Y [{self.zoom_y_range[0]:.2f}, {self.zoom_y_range[1]:.2f}]")
+
+    def display_camera_feed(self, img_array, row_intensity):
+        if self.mono_mode == "Mono12":
+            img_array = ((img_array / 4095) * 255).astype(np.uint8)
+
+        img_colored = cv2.cvtColor(img_array, cv2.COLOR_GRAY2BGR)
+
+        # Row 위치 텍스트 생성
+        text = ""
+        if len(self.selected_rows) >= 1:
+            start_row = self.selected_rows[0]
+            text = f"Start: {start_row}"
+            cv2.line(img_colored, (0, start_row), (self.camera_size[0], start_row), (0, 255, 0), 3)
+        if len(self.selected_rows) == 2:
+            start_row, end_row = self.selected_rows
+            text = f"Range: {start_row} ~ {end_row}"
+            cv2.line(img_colored, (0, start_row), (self.camera_size[0], start_row), (0, 255, 0), 3)
+            cv2.line(img_colored, (0, end_row), (self.camera_size[0], end_row), (0, 255, 0), 3)
+
+        # OpenCV 창 업데이트
+        cv2.putText(img_colored, text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 3)
+        cv2.imshow(f'Basler Camera - {self.mono_mode}', img_colored)
+
+        # 🔥 실시간 그래프 업데이트
+        plt.clf()
+        plt.plot(self.x_cm if self.use_cm else self.x_original_nm, row_intensity, color='red', linewidth=1)
+        plt.xlabel("Wavenumber (cm^-1)" if self.use_cm else "Wavelength (nm)")
+        plt.ylabel("Intensity")
+        plt.title("Real-Time Spectrum")
+
+        # 🔥 xlim, ylim이 설정되었을 경우 확대 적용
+        plt.xlim(self.zoom_x_range if hasattr(self, 'zoom_x_range') else [self.x_cm[0], self.x_cm[-1]] if self.use_cm else [self.x_original_nm[0], self.x_original_nm[-1]])
+        plt.ylim(self.zoom_y_range if hasattr(self, 'zoom_y_range') else [0, np.max(row_intensity)])
+
+        plt.grid()
+        plt.pause(0.1)  # 🔥 실시간 그래프 유지
+
 
 
 if __name__ == '__main__':

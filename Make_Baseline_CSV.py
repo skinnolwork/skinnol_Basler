@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import make_interp_spline
 
 # 1. CSV 데이터 불러오기
-file_path = 'data_Mono12_Row_20250123_092933_T.csv'  # CSV 파일 경로
+file_path = 'data_Mono12_Row_20250124_120851.csv'  # CSV 파일 경로
 data = pd.read_csv(file_path)
 
 # X축 값과 Intensity 값 가져오기
-x_values = data['X'].values  # 'X' 컬럼
-intensity = data['Y'].values  # 'Y' 컬럼
+x_values = data['cm^-1'].values  # 'X' 컬럼
+intensity = data['intensity'].values  # 'Y' 컬럼
 
 # X축 감소 방향으로 정렬
 sorted_indices = np.argsort(x_values)[::-1]  # 내림차순 정렬

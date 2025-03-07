@@ -162,8 +162,7 @@ class PeakDetection:
         # 파일 경로 수정
         base_name, ext = os.path.splitext(self.file_path)
         output_file = f"{base_name}_convert{ext}"
-
-        # 파일 저장
+                            
         data.to_csv(output_file, index=False)
         print(f"Processed data saved to {output_file}")
 
