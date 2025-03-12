@@ -4,12 +4,12 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 # CSV 파일 읽기
-file_path = "Littman_result_3.csv"
+file_path = "./20250312/data_Mono12_Row_20250312_100304.csv"
 data = pd.read_csv(file_path)
 
 # x와 y 값 추출
-x = data['x'].values
-y = data['y'].values
+x = data['cm^-1'].values
+y = data['intensity'].values
 
 # 보간 함수 생성 (선형 보간)
 interp_function = interp1d(x, y, kind='linear', fill_value="extrapolate")
