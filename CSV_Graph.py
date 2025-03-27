@@ -1,26 +1,19 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-file_path = "skin_3s_back_1.csv"
-with open(file_path, "r", encoding="utf-8") as file:
-    lines = file.readlines()
+# CSV 경로
+file_path = "data_Mono12_Row_20250326_122809.csv"
 
-data_start_index = lines.index("XYDATA=\n") + 1
-data_lines = lines[data_start_index:]
+# CSV 불러오기
+df = pd.read_csv(file_path)
 
-x_values = []
-y_values = []
+# x축은 보정된 'cm^-1', y축은 'intensity'
+x = df["cm^-1"]
+y = df["intensity"]
 
-for line in data_lines:
-    try:
-        x, y = map(float, line.strip().split(","))
-        x_values.append(x)
-        y_values.append(y)
-    except ValueError:
-        continue
-
+# 그래프 그리기
 plt.figure(figsize=(10, 5))
-plt.plot(x_values, y_values, label="Raman Spectrum", color="blue")
+plt.plot(x, y, label="Raman Spectrum", color="blue")
 plt.xlabel("Raman Shift (1/cm)")
 plt.ylabel("Intensity")
 plt.title("Raman Spectrum Analysis")

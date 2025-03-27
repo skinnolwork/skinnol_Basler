@@ -10,10 +10,10 @@ import os
 
 # 변수 설정
 CAMERA_SIZE = [3840, 2160]  # Width, Height
-EXPOSURE_TIME = 3000.0
+EXPOSURE_TIME = 4000.0
 GAIN = 10.0
 
-MONO_MODE = "Mono12"  # Mono8 또는 Mono12 설정
+MONO_MODE = "Mono8"  # Mono8 또는 Mono12 설정
 
 class BaslerCamera:
     def __init__(self, camera_size, exposure_time, gain, mono_mode):

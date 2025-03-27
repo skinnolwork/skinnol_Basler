@@ -3,12 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # CSV 파일 읽기
-file_path = "Littman_result_1.csv"
+file_path = "data_Mono12_Row_20250325_145806.csv"
 data = pd.read_csv(file_path)
 
 # x와 y 값 추출
-x = data['x'].values
-y = data['y'].values
+x = data['cm^-1'].values
+y = data['intensity'].values
 
 # y의 최대값에서 50% 계산
 half_max = max(y) * 0.5

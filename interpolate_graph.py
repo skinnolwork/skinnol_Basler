@@ -4,7 +4,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 # CSV 파일 읽기
-file_path = "./20250312/data_Mono12_Row_20250312_100304.csv"
+file_path = "data_Mono12_Row_20250326_122809.csv"
 data = pd.read_csv(file_path)
 
 # x와 y 값 추출
