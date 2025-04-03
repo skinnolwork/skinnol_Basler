@@ -2,13 +2,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # CSV 경로
-file_path = "data_Mono12_Row_20250326_122809.csv"
+file_path = "data_Mono12_Row_20250205_161744.csv"
 
 # CSV 불러오기
 df = pd.read_csv(file_path)
 
 # x축은 보정된 'cm^-1', y축은 'intensity'
-x = df["cm^-1"]
+x = df["nm"]
 y = df["intensity"]
 
 # 그래프 그리기

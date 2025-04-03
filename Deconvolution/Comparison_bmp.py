@@ -14,7 +14,7 @@ def inverse_filter(image, psf):
     image_fft = np.fft.fft2(image)
     psf_fft = np.fft.fft2(psf, s=image.shape)
 
-    psf_fft[np.abs(psf_fft) < 0.4] = 0.4
+    psf_fft[np.abs(psf_fft) < 0.35] = 0.35
 
     deconv_fft = image_fft / psf_fft
     deconvolved = np.fft.ifft2(deconv_fft).real
@@ -41,14 +41,14 @@ def plot_graph(original_img, deconvolved_img, selected_peaks):
     plt.figure(figsize=(12, 6))
 
     # 📌 원본 Intensity 그래프
-    plt.plot(original_column_sum, y_axis, label="Original Intensity", linestyle="solid", color="blue", alpha=1.0)
-    plt.plot(deconvolved_column_sum, y_axis, label="Deconvolved Intensity", linestyle="solid", color="red", alpha=0.5)
+    plt.plot(original_column_sum, y_axis, label="Original Intensity", linestyle="--", color="blue", alpha=1.0)
+    plt.plot(deconvolved_column_sum, y_axis, label="Deconvolved Intensity", linestyle="-", color="red", alpha=0.5)
 
     plt.ylabel("Column Index")
     plt.xlabel("Intensity")
     plt.title(f"Comparison of Intensity (Original vs Deconvolved)")
 
-    plt.gca().set_ylim(300, 1500)
+    # plt.gca().set_ylim(300, 1500)
 
     plt.legend()
     plt.grid()
@@ -86,12 +86,12 @@ def main():
     selected_peaks = []  # Column 선택 초기화
 
     # 📌 8-bit BMP 이미지 불러오기
-    image_path = "original_Mono8_20250305_162122.bmp"
+    image_path = "original_Mono8_20250401_104628.bmp"
     blurred_image = np.array(Image.open(image_path).convert("L"), dtype=np.float32)
 
     # 📌 PSF 설정
-    psf_height = 2000  # 기존 20 → 200 (PSF가 영향 미치도록 변경)
-    psf_sigma = 1   # 기존 10 → 50 (블러 효과가 반영되도록 변경)
+    psf_height = 200  # 기존 20 → 200 (PSF가 영향 미치도록 변경)
+    psf_sigma = 100   # 기존 10 → 50 (블러 효과가 반영되도록 변경)
 
     psf = vertical_gaussian_psf(psf_height, psf_sigma)
 
@@ -107,7 +107,7 @@ def main():
     deconvolved_image_uint8 = np.clip(deconvolved_image, 0, 255).astype(np.uint8)
 
     # 📌 결과 저장 (BMP 포맷)
-    output_path = "Deconvolved_Mono8_8bit.bmp"
+    output_path = "A.bmp"
     Image.fromarray(deconvolved_image_uint8).save(output_path)
 
     # 📌 결과 시각화
