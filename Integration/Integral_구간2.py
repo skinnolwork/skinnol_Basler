@@ -2,15 +2,6 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-"""
-라만 적분 + 21 세그먼트 층층이 & 비율 그래프
-(두 구간 = x1-x2, x3-x4 → ratio = Area2 / Area1)
-
-왼쪽 2/3  : 세그먼트 곡선(층층이) + 각 구간 넓이 라벨  
-오른쪽 1/3: 세그먼트별 ratio 점·선  ―   곡선 색상과 동일하게 표시
-라벨·점·선 모두 “곡선의 맨 오른쪽(λ=750 nm) y값”에 맞춰 수평 정렬
-"""
-
 # ────────────── 옵션 ──────────────
 SHOW_MODE   = "offset"      # "offset" / "alpha"
 OFFSET_STEP = 200000
@@ -56,7 +47,6 @@ def pure_peak_area(x_sel, y_sel):
 
 # 5. 층층이 + 비율 그래프 ---------------------------------------------------
 def stacked_plot(idx_pairs):
-    """idx_pairs = [(idx1,idx2), (idx3,idx4)]"""
     count = 7
     seg_h = int(len(trimmed)/count)
     # fig  = plt.figure(figsize=(16,8))
