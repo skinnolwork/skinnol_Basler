@@ -20,15 +20,14 @@ def inverse_filter(image, psf):
     deconvolved = np.fft.ifft2(deconv_fft).real
     return deconvolved
 
-# 📌 Column 선택 후 그래프 비교
+# Column 선택 후 그래프 비교
 def plot_graph(original_img, deconvolved_img, selected_peaks):
-    """ 선택한 Column 범위에서 Original vs. Deconvolved 그래프 비교 """
     if len(selected_peaks) != 2:
-        print("두 개의 Column 좌표를 선택해야 합니다.")
+        print("두 개의 Column 좌표를 선택")
         return
 
     start_col, end_col = sorted(selected_peaks)
-    y_axis = np.arange(original_img.shape[0])  # 이미지 높이 (픽셀 인덱스)
+    y_axis = np.arange(original_img.shape[0])
 
     # 선택한 범위 내 모든 컬럼을 합산
     original_column_sum = np.sum(original_img[:, start_col:end_col + 1], axis=1)
@@ -40,23 +39,21 @@ def plot_graph(original_img, deconvolved_img, selected_peaks):
 
     plt.figure(figsize=(12, 6))
 
-    # 📌 원본 Intensity 그래프
+    # 원본 Intensity 그래프
     plt.plot(original_column_sum, y_axis, label="Original Intensity", linestyle="--", color="blue", alpha=1.0)
     plt.plot(deconvolved_column_sum, y_axis, label="Deconvolved Intensity", linestyle="-", color="red", alpha=0.5)
 
     plt.ylabel("Column Index")
     plt.xlabel("Intensity")
     plt.title(f"Comparison of Intensity (Original vs Deconvolved)")
-
-    # plt.gca().set_ylim(300, 1500)
-
+    
     plt.legend()
     plt.grid()
     plt.gca().invert_yaxis()  # Y축 반전 (위가 0부터 시작)
 
     plt.show()
 
-# 📌 마우스 클릭 이벤트 처리 (Column 선택)
+# 마우스 클릭 이벤트 처리 (Column 선택)
 def mouse_callback(event, x, y, flags, param):
     global selected_peaks
 
@@ -65,7 +62,7 @@ def mouse_callback(event, x, y, flags, param):
     if event == cv2.EVENT_LBUTTONDOWN:
         if len(selected_peaks) == 2:
             selected_peaks = []  # 두 개를 초과하면 초기화
-        selected_peaks.append(int(x / scale_factor))  # 🔥 클릭 위치를 원래 크기로 변환
+        selected_peaks.append(int(x / scale_factor))
 
         print(f"Selected Column: {selected_peaks[-1]}")
 
@@ -80,37 +77,37 @@ def mouse_callback(event, x, y, flags, param):
         if len(selected_peaks) == 2:
             plot_graph(original_img, deconvolved_img, selected_peaks)
 
-# 📌 메인 실행 함수
+# 메인 실행 함수
 def main():
     global selected_peaks
     selected_peaks = []  # Column 선택 초기화
 
-    # 📌 8-bit BMP 이미지 불러오기
+    # 8-bit BMP 이미지 불러오기
     image_path = "original_Mono8_20250401_104628.bmp"
     blurred_image = np.array(Image.open(image_path).convert("L"), dtype=np.float32)
 
-    # 📌 PSF 설정
+    # PSF 설정
     psf_height = 200  # 기존 20 → 200 (PSF가 영향 미치도록 변경)
     psf_sigma = 100   # 기존 10 → 50 (블러 효과가 반영되도록 변경)
 
     psf = vertical_gaussian_psf(psf_height, psf_sigma)
 
-    # 📌 PSF를 이미지 크기로 확장
+    # PSF를 이미지 크기로 확장
     psf_2d = np.zeros_like(blurred_image)
     psf_2d[:psf_height, :blurred_image.shape[1]] = np.tile(psf, (1, blurred_image.shape[1]))
-    psf_2d = np.fft.ifftshift(psf_2d)  # PSF 위치 조정
+    psf_2d = np.fft.ifftshift(psf_2d)
 
-    # 📌 디컨볼루션 적용 (푸리에 변환 + 역 컨볼루션만 수행)
+    # 디컨볼루션 적용 (푸리에 변환 + 역 컨볼루션만 수행)
     deconvolved_image = inverse_filter(blurred_image, psf_2d)
 
-    # 📌 8-bit 값 변환 (외부 보정 없이 순수한 결과 저장)
+    # 8-bit 값 변환 (외부 보정 없이 순수한 결과 저장)
     deconvolved_image_uint8 = np.clip(deconvolved_image, 0, 255).astype(np.uint8)
 
-    # 📌 결과 저장 (BMP 포맷)
-    output_path = "A.bmp"
+    # 결과 저장 (BMP 포맷)
+    output_path = "Comparison_image.bmp"
     Image.fromarray(deconvolved_image_uint8).save(output_path)
 
-    # 📌 결과 시각화
+    # 결과 시각화
     fig, ax = plt.subplots(1, 2, figsize=(15, 7))
     ax[0].imshow(blurred_image, cmap='gray', vmin=0, vmax=255)
     ax[0].set_title("Original Image")
@@ -124,11 +121,11 @@ def main():
 
     print(f"Deconvolved BMP image saved at: {output_path}")
 
-    # 📌 Original 이미지 출력 (Column 선택 가능)
+    # Original 이미지 출력 (Column 선택 가능)
     cv2.namedWindow("Original Image", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Original Image", 1024, 768)  # 창 크기 강제 지정
+    cv2.resizeWindow("Original Image", 1024, 768)
 
-    # 🔥 원본 이미지를 화면에 맞게 리사이즈 (축소 비율 조정 가능)
+    # 원본 이미지를 화면에 맞게 리사이즈 (축소 비율 조정 가능)
     scale_factor = 0.5  # 50% 크기로 축소
     img_display = cv2.resize(blurred_image, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
 
@@ -137,7 +134,7 @@ def main():
     img_display = cv2.cvtColor(img_display, cv2.COLOR_GRAY2BGR)
 
     while True:
-        temp_display = img_display.copy()  # 선택된 Column 반영을 위해 복사본 사용
+        temp_display = img_display.copy()
 
         for peak in selected_peaks:
             cv2.line(temp_display, (int(peak * scale_factor), 0),
@@ -155,6 +152,6 @@ def main():
 
     cv2.destroyAllWindows()
 
-# 📌 코드 실행
+# 코드 실행
 if __name__ == "__main__":
     main()
